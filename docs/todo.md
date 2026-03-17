@@ -26,10 +26,8 @@
 
 ## バックエンド統合
 
-> Express と better-sqlite3 は既に `package.json` に追加済み。実装が必要。
-
 - [ ] 🟠 Express サーバーのエントリポイント作成（`server/index.ts` など）
-- [ ] 🟠 SQLite データベースのスキーマ定義
+- [ ] 🟠 データベースのスキーマ定義（SQLite 等）
   - `users` テーブル
   - `tasks` テーブル
   - `categories` テーブル
@@ -44,41 +42,9 @@
 
 ---
 
-## AI 機能（Google Gemini）
-
-> `@google/genai` SDK と `GEMINI_API_KEY` 環境変数は設定済み。機能が未実装。
-
-- [ ] 🟡 タスク作成時の優先度・カテゴリ自動提案（タイトル入力から推論）
-- [ ] 🟡 タスク説明の自動補完・生成
-- [ ] 🟡 チームの作業負荷バランス分析・提案
-- [ ] 🟡 週次サマリーレポートの自動生成
-- [ ] 🟢 スケジュール最適化提案（AI によるタスク並び替え推薦）
-
----
-
-## コードアーキテクチャ
-
-- [ ] 🟠 `App.tsx`（約1254行）をコンポーネント・ファイルに分割
-  - `components/TaskCard.tsx`
-  - `components/CalendarView.tsx`
-  - `components/AdminDashboard.tsx`
-  - `components/TaskModal.tsx`
-  - `components/Sidebar.tsx`
-  - など
-- [ ] 🟠 状態管理ライブラリの導入（Zustand / Jotai / Redux Toolkit）
-- [ ] 🟡 React Router の導入（URL ベースのナビゲーション）
-- [ ] 🟡 カスタムフックへの抽出
-  - `useAuth.ts`
-  - `useTasks.ts`
-  - `useToast.ts`
-  - `useTheme.ts`
-
----
-
 ## ユーザー管理
 
 - [ ] 🟠 ユーザー登録フォームの実装
-- [ ] 🟡 プロフィール編集機能（表示名・パスワード変更）
 - [ ] 🟡 管理者によるユーザー管理（追加・削除・ロール変更）
 - [ ] 🟢 アバター画像のアップロード・表示
 
@@ -94,7 +60,6 @@
 - [ ] 🟡 タスクのコピー・複製機能
 - [ ] 🟢 タスクへのファイル添付
 - [ ] 🟢 タスクにタグ付け（カテゴリとは別の軸）
-- [ ] 🟢 他のメンバーへのタスク割り当て（管理者から）
 - [ ] 🟢 タスクの依存関係設定（前のタスクが完了するまでブロック）
 
 ---
@@ -110,7 +75,7 @@
 
 ## 通知・リマインダー
 
-- [ ] 🟠 ブラウザ通知（Web Notifications API）でのタスクリマインダー
+- [ ] 🟠 ブラウザ通知（Web Notifications API）でのタスクリマインダー（通知設定 UI は実装済み）
 - [ ] 🟡 期限前アラート設定（1時間前・前日など）
 - [ ] 🟡 メール通知（バックエンド実装後）
 - [ ] 🟢 Slack / Discord Webhook 連携通知
@@ -131,9 +96,9 @@
 
 - [ ] 🟡 操作の Undo / Redo 機能
 - [ ] 🟡 タスクカードのカラーカスタマイズ
-- [ ] 🟡 ダッシュボードのグラフ・チャート表示（Chart.js / Recharts）
 - [ ] 🟡 キーボードショートカットの整備
 - [ ] 🟡 アクセシビリティ改善（ARIA 属性、キーボード操作）
+- [ ] 🟡 言語切り替えの実装（現状は設定 UI のみで動作なし）
 - [ ] 🟢 カスタムテーマカラーの設定
 - [ ] 🟢 タスク一覧の表示密度切り替え（コンパクト / 標準 / 詳細）
 
@@ -146,9 +111,9 @@
   - フィルタリングロジック
   - ステータス遷移
 - [ ] 🟠 コンポーネントテスト
-  - TaskCard
+  - TaskBoard
   - TaskModal
-  - CalendarView
+  - Dashboard
 - [ ] 🟡 E2E テスト（Playwright / Cypress）
   - ログイン〜タスク作成〜削除フロー
   - 管理者ダッシュボード閲覧フロー
@@ -175,18 +140,26 @@
 ## 完了済み
 
 - [x] React 19 + TypeScript + Vite によるプロジェクトセットアップ
-- [x] Tailwind CSS 4 によるスタイリング
-- [x] ライト/ダークテーマ切り替え
+- [x] Tailwind CSS 3（PostCSS 経由）によるスタイリング（CDN から移行済み）
+- [x] tailwindcss-animate による CSS アニメーション
+- [x] 外部 CDN 依存の排除（全依存を npm パッケージで管理）
+- [x] Vite の manualChunks による recharts チャンク分離（本番ビルド最適化）
+- [x] App.tsx のコンポーネント分割（Auth / TaskBoard / Dashboard / TaskModal / SettingsModal / ConfirmModal / Icons）
+- [x] storageService による localStorage アクセス抽象化（services/storage.ts）
+- [x] ダークモード / ライトモード切り替え（ユーザー preferences に保存）
 - [x] ログイン認証（localStorage ベース）
 - [x] ロールベースアクセス制御（admin / member）
 - [x] タスクの CRUD 操作
-- [x] タスクのステータス管理（todo → inprogress → done）
-- [x] 優先度・カテゴリ・ステータスのフィルタリング
+- [x] タスクのステータス管理（todo / inprogress / done）
+- [x] ステータス・優先度のフィルタリング
 - [x] テキスト検索
-- [x] デイビュー（日次タスク一覧）
 - [x] カレンダービュー（月次カレンダー + ドラッグ&ドロップ）
-- [x] 管理者ダッシュボード（メンバー統計・全タスクテーブル）
+- [x] デイリービュー（タイムライン形式）
+- [x] 期間タスク対応（endDate フィールド追加）
+- [x] カテゴリのオブジェクト化（id / label / color）とカレンダー色分け
+- [x] 管理者ダッシュボード（recharts BarChart + PieChart）
+- [x] メンバー進捗カード（完了率・ワークロードスコア）
+- [x] 削除確認ダイアログ（ConfirmModal）
+- [x] 設定モーダル（プロフィール編集・パスワード変更・カテゴリ管理・通知設定）
 - [x] トースト通知
 - [x] レスポンシブデザイン（PC + モバイル）
-- [x] Motion によるアニメーション
-- [x] カスタムカテゴリの追加

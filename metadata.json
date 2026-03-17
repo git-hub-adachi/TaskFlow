@@ -1,5 +1,5 @@
 {
-  "name": "TaskFlow - Team TODO Management App",
-  "description": "A comprehensive team task management application with calendar views, admin dashboards, and workload analytics.",
+  "name": "TaskFlow - Team TODO Manager",
+  "description": "A sophisticated team task management application with member and admin roles, featuring calendar views, workload analytics, and real-time status tracking.",
   "requestFramePermissions": []
 }
