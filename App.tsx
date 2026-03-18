@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Task, AppState, Status } from './types';
 import { storageService } from './services/storage';
+import { supabase } from './lib/supabaseClient';
 import Auth from './components/Auth';
 import TaskBoard from './components/TaskBoard';
 import Dashboard from './components/Dashboard';
@@ -150,8 +151,32 @@ const App: React.FC = () => {
     addToast(`日付を変更しました`, 'info');
   };
 
+  const handleAuthSuccess = async () => {
+    // Supabase セッションからログインユーザーを取得
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) return;
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
+    if (profile) {
+      const user: User = {
+        id: profile.id,
+        username: profile.username,
+        name: profile.name,
+        email: authUser.email,
+        role: profile.role,
+        preferences: profile.preferences,
+      };
+      storageService.setSession(user);
+      setState(prev => ({ ...prev, currentUser: user }));
+      addToast(`${user.name}としてログインしました`, 'success');
+    }
+  };
+
   if (!state.currentUser) {
-    return <Auth onLogin={handleLogin} users={state.users} />;
+    return <Auth onSuccess={handleAuthSuccess} />;
   }
 
   const userTasks = state.currentUser.role === 'admin' 

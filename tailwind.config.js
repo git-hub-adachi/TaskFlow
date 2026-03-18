@@ -6,6 +6,7 @@ export default {
     './*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
     './services/**/*.{ts,tsx}',
+    './lib/**/*.{ts,tsx}',
   ],
   theme: {
     extend: {

@@ -15,16 +15,34 @@
 │  │       storageService              │  │
 │  │  services/storage.ts 経由         │  │
 │  └───────────────────────────────────┘  │
-│                   │                     │
-│  ┌───────────────────────────────────┐  │
-│  │         localStorage              │  │
-│  │  users / tasks / session /        │  │
-│  │  categories                       │  │
-│  └───────────────────────────────────┘  │
-└─────────────────────────────────────────┘
+│            │              │             │
+│  ┌─────────────┐  ┌───────────────────┐ │
+│  │localStorage │  │  Supabase Client  │ │
+│  │  (session)  │  │  @supabase/supabase│ │
+│  └─────────────┘  └───────────────────┘ │
+└──────────────────────────┬──────────────┘
+                           │ HTTPS
+             ┌─────────────▼─────────────┐
+             │        Supabase            │
+             │  ┌─────────────────────┐  │
+             │  │   Auth (JWT)        │  │
+             │  │  ユーザー認証・セッション│  │
+             │  └─────────────────────┘  │
+             │  ┌─────────────────────┐  │
+             │  │  PostgreSQL DB      │  │
+             │  │  profiles / tasks / │  │
+             │  │  categories         │  │
+             │  └─────────────────────┘  │
+             │  ┌─────────────────────┐  │
+             │  │  Row Level Security │  │
+             │  │  (RLS ポリシー)      │  │
+             │  └─────────────────────┘  │
+             └───────────────────────────┘
 ```
 
-- バックエンドなし。全データをブラウザの localStorage で管理する。
+- **データ永続化**: Supabase PostgreSQL でユーザー・タスク・カテゴリを管理する。
+- **認証**: Supabase Auth（JWT）を使用。セッション情報は localStorage に保持される。
+- **権限制御**: Row Level Security (RLS) により、member は自分のタスクのみ操作可能。
 - React Router を使わずコンポーネント内の `view` state で画面を切り替える。
 - ビルドツール: Vite 6 + TypeScript 5.8
 
@@ -41,6 +59,9 @@
 | アニメーション | tailwindcss-animate | 1.x（CSS クラスベース） |
 | チャート | recharts | 3.x |
 | アイコン | 自作 Icons.tsx（SVG） | - |
+| データベース | Supabase (PostgreSQL) | 最新版 |
+| 認証 | Supabase Auth (JWT) | 最新版 |
+| DB クライアント | @supabase/supabase-js | 2.x |
 
 > **注意**: CDN（cdn.tailwindcss.com / esm.sh）には依存しない。全ライブラリを npm パッケージとして管理する。
 
@@ -117,33 +138,37 @@ interface AppState {
 }
 ```
 
-### 3.6 localStorage キー
+### 3.6 localStorage キー（セッションのみ残存）
 
 | キー | 型 | 内容 |
 |------|----|------|
-| `taskflow_users` | `User[]` | ユーザー一覧 |
-| `taskflow_tasks` | `Task[]` | タスク一覧 |
-| `taskflow_session` | `User` | ログイン中ユーザー |
-| `taskflow_categories` | `Category[]` | カテゴリ一覧 |
+| `taskflow_session` | `User` | ログイン中ユーザー（Supabase Auth セッションのキャッシュ） |
 
-> テーマ設定は `taskflow_session` 内の `User.preferences.darkMode` として保存する。
+> ユーザー・タスク・カテゴリのデータは Supabase に移行済み。
+> セッション情報は Supabase Auth SDK が自動管理する（`sb-<project>-auth-token`）。
+> テーマ設定は `profiles.preferences.darkMode` として Supabase に保存する。
 
 ---
 
 ## 4. ストレージ層（services/storage.ts）
 
-`storageService` オブジェクトが localStorage へのアクセスを抽象化する。
+`storageService` オブジェクトが Supabase クライアントへのアクセスを抽象化する。
 
 | メソッド | 説明 |
 |---------|------|
-| `getTasks()` | タスク一覧を取得 |
-| `saveTasks(tasks)` | タスク一覧を保存 |
-| `getUsers()` | ユーザー一覧を取得（未初期化時は INITIAL_USERS をシード） |
-| `saveUsers(users)` | ユーザー一覧を保存 |
-| `getSession()` | ログイン中ユーザーを取得 |
-| `setSession(user)` | セッションを保存（null でクリア） |
-| `getCategories()` | カテゴリ一覧を取得（未初期化時は INITIAL_CATEGORIES をシード） |
-| `saveCategories(categories)` | カテゴリ一覧を保存 |
+| `getTasks(userId?)` | タスク一覧を取得（admin は全件、member は自分のみ） |
+| `createTask(task)` | タスクを作成 |
+| `updateTask(id, task)` | タスクを更新 |
+| `deleteTask(id)` | タスクを削除 |
+| `getUsers()` | ユーザー一覧（profiles）を取得（admin のみ） |
+| `getSession()` | Supabase Auth の現在セッションを取得 |
+| `signIn(email, password)` | メール＋パスワードでサインイン |
+| `signOut()` | サインアウト |
+| `getCategories()` | カテゴリ一覧を取得 |
+| `createCategory(category)` | カテゴリを作成 |
+| `updateCategory(id, category)` | カテゴリを更新 |
+| `deleteCategory(id)` | カテゴリを削除 |
+| `updateProfile(id, profile)` | プロフィール（表示名・preferences 等）を更新 |
 
 ---
 
@@ -382,21 +407,266 @@ manualChunks: {
 
 ---
 
-## 13. 将来の拡張設計（未実装）
+## 13. 将来の拡張設計
 
-### 13.1 バックエンド API
+### 13.1 リアルタイム同期
 
-想定エンドポイント:
-```
-POST   /api/auth/login
-POST   /api/auth/logout
-GET    /api/tasks
-POST   /api/tasks
-PUT    /api/tasks/:id
-DELETE /api/tasks/:id
-GET    /api/users
+Supabase Realtime を活用して、他のユーザーのタスク更新を即時反映できる：
+
+```typescript
+supabase
+  .channel('tasks')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, handler)
+  .subscribe()
 ```
 
-### 13.2 パスワードのセキュリティ強化
+### 13.2 ファイル添付
 
-現状は平文保存。本番環境では bcrypt 等によるハッシュ化が必要。
+Supabase Storage を使ってタスクにファイルを添付できるよう拡張可能。
+
+---
+
+## 14. Supabase データベース設計
+
+### 14.1 テーブル構成
+
+| テーブル | 説明 |
+|---------|------|
+| `auth.users` | Supabase Auth が管理する認証ユーザー（メール・パスワード） |
+| `public.profiles` | ユーザー拡張情報（username・role・preferences） |
+| `public.categories` | タスクカテゴリ（チーム共有） |
+| `public.tasks` | タスク情報 |
+
+### 14.2 ER 図
+
+```
+auth.users (1) ──── (1) profiles
+profiles   (1) ──── (N) tasks
+profiles   (1) ──── (N) categories (created_by)
+categories (1) ──── (N) tasks      (category_id)
+```
+
+### 14.3 SQL スキーマ定義
+
+```sql
+-- ====================================
+-- TaskFlow Supabase Schema
+-- ====================================
+
+-- UUID 拡張（Supabase ではデフォルトで有効）
+create extension if not exists "pgcrypto";
+
+-- ====================================
+-- テーブル定義
+-- ====================================
+
+-- profiles: auth.users の拡張情報
+create table public.profiles (
+  id          uuid        primary key references auth.users(id) on delete cascade,
+  username    text        not null unique,
+  name        text        not null,
+  role        text        not null default 'member'
+                          check (role in ('admin', 'member')),
+  preferences jsonb       not null default '{"darkMode":true,"notifications":true,"language":"ja"}'::jsonb,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+-- categories: タスクカテゴリ（チーム共有）
+create table public.categories (
+  id         uuid        primary key default gen_random_uuid(),
+  label      text        not null,
+  color      text        not null,                              -- Hex カラー例: '#3b82f6'
+  created_by uuid        references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- tasks: タスク情報
+create table public.tasks (
+  id          uuid        primary key default gen_random_uuid(),
+  user_id     uuid        not null references public.profiles(id) on delete cascade,
+  title       text        not null,
+  description text        not null default '',
+  priority    text        not null default 'medium'
+                          check (priority in ('high', 'medium', 'low')),
+  intensity   integer     not null default 3
+                          check (intensity between 1 and 5),
+  category_id uuid        references public.categories(id) on delete set null,
+  status      text        not null default 'todo'
+                          check (status in ('todo', 'inprogress', 'done')),
+  date        date        not null,
+  end_date    date,
+  is_all_day  boolean     not null default false,
+  start_time  text,                                             -- 'HH:MM' 形式
+  end_time    text,                                             -- 'HH:MM' 形式
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+-- ====================================
+-- インデックス
+-- ====================================
+
+create index tasks_user_id_idx on public.tasks (user_id);
+create index tasks_date_idx    on public.tasks (date);
+create index tasks_status_idx  on public.tasks (status);
+
+-- ====================================
+-- updated_at 自動更新トリガー
+-- ====================================
+
+create or replace function public.handle_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create trigger profiles_updated_at
+  before update on public.profiles
+  for each row execute function public.handle_updated_at();
+
+create trigger tasks_updated_at
+  before update on public.tasks
+  for each row execute function public.handle_updated_at();
+
+-- ====================================
+-- auth.users 登録時に profiles を自動作成
+-- ====================================
+
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer as $$
+begin
+  insert into public.profiles (id, username, name, role)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data->>'name',     split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data->>'role',     'member')
+  );
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- ====================================
+-- Row Level Security (RLS)
+-- ====================================
+
+alter table public.profiles   enable row level security;
+alter table public.categories enable row level security;
+alter table public.tasks      enable row level security;
+
+-- ---------- profiles ----------
+-- 自分のプロフィールは閲覧・更新可能
+create policy "profiles: 自己閲覧"
+  on public.profiles for select
+  using (auth.uid() = id);
+
+create policy "profiles: 自己更新"
+  on public.profiles for update
+  using (auth.uid() = id);
+
+-- admin は全プロフィールを閲覧可能
+create policy "profiles: admin 全閲覧"
+  on public.profiles for select
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  );
+
+-- ---------- categories ----------
+-- 認証済みユーザーは全カテゴリを閲覧可能
+create policy "categories: 全ユーザー閲覧"
+  on public.categories for select
+  using (auth.uid() is not null);
+
+-- 認証済みユーザーはカテゴリを作成可能
+create policy "categories: 認証済み作成"
+  on public.categories for insert
+  with check (auth.uid() is not null);
+
+-- 作成者 または admin は更新・削除可能
+create policy "categories: 作成者・admin 更新"
+  on public.categories for update
+  using (
+    created_by = auth.uid()
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  );
+
+create policy "categories: 作成者・admin 削除"
+  on public.categories for delete
+  using (
+    created_by = auth.uid()
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  );
+
+-- ---------- tasks ----------
+-- member は自分のタスクのみ閲覧
+create policy "tasks: 自己閲覧"
+  on public.tasks for select
+  using (user_id = auth.uid());
+
+-- admin は全タスクを閲覧
+create policy "tasks: admin 全閲覧"
+  on public.tasks for select
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  );
+
+-- ユーザーは自分のタスクを作成（admin は任意ユーザー宛に作成可）
+create policy "tasks: 自己・admin 作成"
+  on public.tasks for insert
+  with check (
+    user_id = auth.uid()
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  );
+
+-- 自分のタスクを更新（admin は全タスクを更新）
+create policy "tasks: 自己・admin 更新"
+  on public.tasks for update
+  using (
+    user_id = auth.uid()
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  );
+
+-- 自分のタスクを削除（admin は全タスクを削除）
+create policy "tasks: 自己・admin 削除"
+  on public.tasks for delete
+  using (
+    user_id = auth.uid()
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  );
+
+-- ====================================
+-- 初期データ（デフォルトカテゴリ）
+-- ====================================
+
+insert into public.categories (id, label, color) values
+  ('00000000-0000-0000-0000-000000000001', '仕事',   '#3b82f6'),
+  ('00000000-0000-0000-0000-000000000002', '学習',   '#8b5cf6'),
+  ('00000000-0000-0000-0000-000000000003', 'その他', '#6b7280');
+```
+
+### 14.4 認証フロー（Supabase Auth）
+
+現在の localStorage ベースの username/password 認証から Supabase Auth に移行する際の対応：
+
+| 現在 | Supabase 移行後 |
+|------|----------------|
+| `username` + `password`（平文） | `email` + `password`（Supabase Auth で安全に管理） |
+| localStorage にユーザー一覧を保持 | `auth.users` + `profiles` テーブルで管理 |
+| セッションを localStorage で手動管理 | Supabase Auth SDK が JWT を自動管理 |
+
+> ログイン UI はメールアドレス入力に変更するか、`username → email` の変換テーブルを `profiles` で引く方式を採用する。
+
+### 14.5 型マッピング（TypeScript ↔ Supabase）
+
+| TypeScript 型 | Supabase テーブル | 主な変更点 |
+|--------------|------------------|-----------|
+| `User` | `profiles` | `password` 削除、`email` は `auth.users` が管理 |
+| `Category` | `categories` | `id` が文字列 → UUID |
+| `Task` | `tasks` | `category` (string) → `category_id` (UUID)、`userId` → `user_id` |
