@@ -1,85 +1,55 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { User, Task, AppState, Status } from './types';
 import { storageService } from './services/storage';
 import { supabase } from './lib/supabaseClient';
 import Auth from './components/Auth';
+import AdminAuth from './components/AdminAuth';
 import TaskBoard from './components/TaskBoard';
 import Dashboard from './components/Dashboard';
 import TaskModal from './components/TaskModal';
 import SettingsModal from './components/SettingsModal';
 import ConfirmModal from './components/ConfirmModal';
-import { 
-  PlusIcon, 
-  BarChartIcon, 
-  CalendarIcon, 
+import {
+  PlusIcon,
+  BarChartIcon,
+  CalendarIcon,
   LogOutIcon,
   ListIcon,
   SettingsIcon
 } from './components/Icons';
 
-const App: React.FC = () => {
-  const [state, setState] = useState<AppState>({
-    currentUser: null,
-    tasks: [],
-    users: [],
-    categories: [],
-  });
+// ---- ログインページ（メンバー用） ----
+const UserLoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
+  return <Auth onSuccess={onSuccess} />;
+};
+
+// ---- ログインページ（管理者用） ----
+const AdminLoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
+  return <AdminAuth onSuccess={onSuccess} />;
+};
+
+// ---- メインアプリ ----
+const MainApp: React.FC<{
+  state: AppState;
+  setState: React.Dispatch<React.SetStateAction<AppState>>;
+  addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+}> = ({ state, setState, addToast }) => {
+  const navigate = useNavigate();
   const [view, setView] = useState<'board' | 'dashboard'>('board');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
 
-  useEffect(() => {
-    const session = storageService.getSession();
-    const tasks = storageService.getTasks();
-    const users = storageService.getUsers();
-    const categories = storageService.getCategories();
-    setState({ currentUser: session, tasks, users, categories });
-  }, []);
-
-  useEffect(() => {
-    if (state.currentUser?.preferences) {
-      const isDark = state.currentUser.preferences.darkMode;
-      if (isDark) {
-        document.documentElement.classList.add('dark');
-        document.body.style.backgroundColor = '#0f172a';
-        document.body.style.color = '#f8fafc';
-      } else {
-        document.documentElement.classList.remove('dark');
-        document.body.style.backgroundColor = '#f8fafc';
-        document.body.style.color = '#0f172a';
-      }
-    } else {
-      // Default to dark mode as per initial design
-      document.documentElement.classList.add('dark');
-      document.body.style.backgroundColor = '#0f172a';
-      document.body.style.color = '#f8fafc';
-    }
-  }, [state.currentUser?.preferences?.darkMode]);
-
-  const addToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3000);
-  };
-
-  const handleLogin = (user: User) => {
-    storageService.setSession(user);
-    setState(prev => ({ ...prev, currentUser: user }));
-    addToast(`${user.name}としてログインしました`, 'success');
-  };
-
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     storageService.setSession(null);
     setState(prev => ({ ...prev, currentUser: null }));
-    setView('board');
     addToast('ログアウトしました');
+    navigate('/login');
   };
 
   const handleUpdateUser = (updatedUser: User) => {
@@ -99,13 +69,13 @@ const App: React.FC = () => {
   const saveTasks = useCallback((newTasks: Task[]) => {
     storageService.saveTasks(newTasks);
     setState(prev => ({ ...prev, tasks: newTasks }));
-  }, []);
+  }, [setState]);
 
   const handleSaveTask = (taskData: Partial<Task>) => {
     let updatedTasks: Task[];
     if (editingTask) {
-      updatedTasks = state.tasks.map(t => 
-        t.id === editingTask.id 
+      updatedTasks = state.tasks.map(t =>
+        t.id === editingTask.id
           ? { ...t, ...taskData, updatedAt: Date.now() } as Task
           : t
       );
@@ -151,38 +121,12 @@ const App: React.FC = () => {
     addToast(`日付を変更しました`, 'info');
   };
 
-  const handleAuthSuccess = async () => {
-    // Supabase セッションからログインユーザーを取得
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return;
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', authUser.id)
-      .single();
-    if (profile) {
-      const user: User = {
-        id: profile.id,
-        username: profile.username,
-        name: profile.name,
-        email: authUser.email,
-        role: profile.role,
-        preferences: profile.preferences,
-      };
-      storageService.setSession(user);
-      setState(prev => ({ ...prev, currentUser: user }));
-      addToast(`${user.name}としてログインしました`, 'success');
-    }
-  };
+  if (!state.currentUser) return null;
 
-  if (!state.currentUser) {
-    return <Auth onSuccess={handleAuthSuccess} />;
-  }
-
-  const userTasks = state.currentUser.role === 'admin' 
-    ? state.tasks 
+  const isAdmin = state.currentUser.role === 'admin';
+  const userTasks = isAdmin
+    ? state.tasks
     : state.tasks.filter(t => t.userId === state.currentUser?.id);
-
   const isDarkMode = state.currentUser?.preferences?.darkMode ?? true;
 
   return (
@@ -197,16 +141,16 @@ const App: React.FC = () => {
         </div>
 
         <nav className="flex-1 space-y-2">
-          <button 
+          <button
             onClick={() => setView('board')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${view === 'board' ? 'bg-blue-600/10 text-blue-500 font-bold border border-blue-600/20' : isDarkMode ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             <CalendarIcon />
             <span>タスクボード</span>
           </button>
-          
-          {state.currentUser.role === 'admin' && (
-            <button 
+
+          {isAdmin && (
+            <button
               onClick={() => setView('dashboard')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${view === 'dashboard' ? 'bg-teal-600/10 text-teal-500 font-bold border border-teal-600/20' : isDarkMode ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}
             >
@@ -226,7 +170,7 @@ const App: React.FC = () => {
               <p className={`text-[10px] uppercase tracking-tighter ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{state.currentUser.role}</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={() => setIsSettingsModalOpen(true)}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isDarkMode ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}
           >
@@ -248,7 +192,7 @@ const App: React.FC = () => {
             </p>
           </div>
           {view === 'board' && (
-            <button 
+            <button
               onClick={() => setIsTaskModalOpen(true)}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-blue-900/40 transition-all active:scale-95"
             >
@@ -259,10 +203,10 @@ const App: React.FC = () => {
         </header>
 
         {view === 'board' ? (
-          <TaskBoard 
-            tasks={userTasks} 
-            user={state.currentUser} 
-            isAdminMode={state.currentUser.role === 'admin'}
+          <TaskBoard
+            tasks={userTasks}
+            user={state.currentUser}
+            isAdminMode={isAdmin}
             onEditTask={(t) => { setEditingTask(t); setIsTaskModalOpen(true); }}
             onDeleteTask={handleDeleteTask}
             onUpdateStatus={handleUpdateStatus}
@@ -270,9 +214,9 @@ const App: React.FC = () => {
             categories={state.categories}
           />
         ) : (
-          <Dashboard 
-            users={state.users} 
-            tasks={state.tasks} 
+          <Dashboard
+            users={state.users}
+            tasks={state.tasks}
             onEditTask={(t) => { setEditingTask(t); setIsTaskModalOpen(true); }}
             onDeleteTask={handleDeleteTask}
             isDarkMode={isDarkMode}
@@ -282,15 +226,15 @@ const App: React.FC = () => {
 
       {/* Bottom Nav - Mobile */}
       <nav className={`md:hidden fixed bottom-0 inset-x-0 h-16 border-t flex justify-around items-center px-4 z-40 transition-colors duration-300 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-        <button 
+        <button
           onClick={() => setView('board')}
           className={`flex flex-col items-center gap-1 ${view === 'board' ? 'text-blue-500' : 'text-slate-500'}`}
         >
           <CalendarIcon />
           <span className="text-[10px]">タスク</span>
         </button>
-        {state.currentUser.role === 'admin' && (
-          <button 
+        {isAdmin && (
+          <button
             onClick={() => setView('dashboard')}
             className={`flex flex-col items-center gap-1 ${view === 'dashboard' ? 'text-teal-500' : 'text-slate-500'}`}
           >
@@ -298,7 +242,7 @@ const App: React.FC = () => {
             <span className="text-[10px]">分析</span>
           </button>
         )}
-        <button 
+        <button
           onClick={() => setIsSettingsModalOpen(true)}
           className="flex flex-col items-center gap-1 text-slate-500"
         >
@@ -307,14 +251,14 @@ const App: React.FC = () => {
         </button>
       </nav>
 
-      {/* Modals & Overlays */}
-      <TaskModal 
-        isOpen={isTaskModalOpen} 
+      {/* Modals */}
+      <TaskModal
+        isOpen={isTaskModalOpen}
         onClose={() => { setIsTaskModalOpen(false); setEditingTask(null); }}
         onSave={handleSaveTask}
         initialTask={editingTask}
         currentUserId={state.currentUser.id}
-        adminUsers={state.currentUser.role === 'admin' ? state.users.filter(u => u.role === 'member') : undefined}
+        adminUsers={isAdmin ? state.users.filter(u => u.role === 'member') : undefined}
         categories={state.categories}
       />
 
@@ -328,7 +272,7 @@ const App: React.FC = () => {
         onSaveCategories={handleSaveCategories}
       />
 
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={isConfirmModalOpen}
         title="タスクの削除"
         message="このタスクを削除してもよろしいですか？この操作は取り消せません。"
@@ -336,15 +280,163 @@ const App: React.FC = () => {
         onCancel={() => { setIsConfirmModalOpen(false); setTaskToDelete(null); }}
         isDarkMode={isDarkMode}
       />
+    </div>
+  );
+};
+
+// ---- ルートコンポーネント ----
+const App: React.FC = () => {
+  const navigate = useNavigate();
+  const [state, setState] = useState<AppState>({
+    currentUser: null,
+    tasks: [],
+    users: [],
+    categories: [],
+  });
+  const [initializing, setInitializing] = useState(true);
+  const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
+
+  const addToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  };
+
+  // Supabase セッションからユーザーを復元
+  const loadUserFromSession = async () => {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) {
+      setInitializing(false);
+      return;
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
+    if (profile) {
+      const user: User = {
+        id: profile.id,
+        username: profile.username,
+        name: profile.name,
+        email: authUser.email,
+        role: profile.role,
+        preferences: profile.preferences,
+      };
+      const tasks = storageService.getTasks();
+      const users = storageService.getUsers();
+      const categories = storageService.getCategories();
+      storageService.setSession(user);
+      setState({ currentUser: user, tasks, users, categories });
+    }
+    setInitializing(false);
+  };
+
+  useEffect(() => {
+    loadUserFromSession();
+
+    // ダークモードのデフォルト適用
+    document.documentElement.classList.add('dark');
+    document.body.style.backgroundColor = '#0f172a';
+    document.body.style.color = '#f8fafc';
+  }, []);
+
+  useEffect(() => {
+    if (!state.currentUser?.preferences) return;
+    const isDark = state.currentUser.preferences.darkMode;
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      document.body.style.backgroundColor = '#0f172a';
+      document.body.style.color = '#f8fafc';
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.style.backgroundColor = '#f8fafc';
+      document.body.style.color = '#0f172a';
+    }
+  }, [state.currentUser?.preferences?.darkMode]);
+
+  const handleAuthSuccess = async () => {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) return;
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
+    if (profile) {
+      const user: User = {
+        id: profile.id,
+        username: profile.username,
+        name: profile.name,
+        email: authUser.email,
+        role: profile.role,
+        preferences: profile.preferences,
+      };
+      const tasks = storageService.getTasks();
+      const users = storageService.getUsers();
+      const categories = storageService.getCategories();
+      storageService.setSession(user);
+      setState({ currentUser: user, tasks, users, categories });
+      addToast(`${user.name}としてログインしました`, 'success');
+      navigate('/');
+    }
+  };
+
+  if (initializing) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <svg className="w-8 h-8 animate-spin text-blue-500" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+        </svg>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Routes>
+        {/* メンバーログイン */}
+        <Route
+          path="/login"
+          element={
+            state.currentUser
+              ? <Navigate to="/" replace />
+              : <UserLoginPage onSuccess={handleAuthSuccess} />
+          }
+        />
+
+        {/* 管理者ログイン */}
+        <Route
+          path="/admin/login"
+          element={
+            state.currentUser
+              ? <Navigate to="/" replace />
+              : <AdminLoginPage onSuccess={handleAuthSuccess} />
+          }
+        />
+
+        {/* メインアプリ（認証済みのみ） */}
+        <Route
+          path="/*"
+          element={
+            state.currentUser
+              ? <MainApp state={state} setState={setState} addToast={addToast} />
+              : <Navigate to="/login" replace />
+          }
+        />
+      </Routes>
 
       {/* Toast Notifications */}
       <div className="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none">
         {toasts.map(toast => (
-          <div 
+          <div
             key={toast.id}
             className={`px-6 py-3 rounded-2xl shadow-2xl border flex items-center gap-3 animate-in fade-in slide-in-from-right-10 duration-300 pointer-events-auto ${
-              toast.type === 'success' ? 'bg-teal-900/90 border-teal-500 text-teal-100' : 
-              toast.type === 'error' ? 'bg-red-900/90 border-red-500 text-red-100' : 
+              toast.type === 'success' ? 'bg-teal-900/90 border-teal-500 text-teal-100' :
+              toast.type === 'error' ? 'bg-red-900/90 border-red-500 text-red-100' :
               'bg-slate-800/90 border-slate-600 text-slate-100'
             }`}
           >
@@ -353,7 +445,7 @@ const App: React.FC = () => {
           </div>
         ))}
       </div>
-    </div>
+    </>
   );
 };
 

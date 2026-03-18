@@ -3,47 +3,51 @@
 ## 1. アーキテクチャ概要
 
 ```
-┌─────────────────────────────────────────┐
-│           ブラウザ (SPA)                  │
-│                                         │
-│  ┌───────────────────────────────────┐  │
-│  │         React 19 (SPA)            │  │
-│  │   App.tsx → components/           │  │
-│  └───────────────────────────────────┘  │
-│                   │                     │
-│  ┌───────────────────────────────────┐  │
-│  │       storageService              │  │
-│  │  services/storage.ts 経由         │  │
-│  └───────────────────────────────────┘  │
-│            │              │             │
-│  ┌─────────────┐  ┌───────────────────┐ │
-│  │localStorage │  │  Supabase Client  │ │
-│  │  (session)  │  │  @supabase/supabase│ │
-│  └─────────────┘  └───────────────────┘ │
-└──────────────────────────┬──────────────┘
-                           │ HTTPS
-             ┌─────────────▼─────────────┐
-             │        Supabase            │
-             │  ┌─────────────────────┐  │
-             │  │   Auth (JWT)        │  │
-             │  │  ユーザー認証・セッション│  │
-             │  └─────────────────────┘  │
-             │  ┌─────────────────────┐  │
-             │  │  PostgreSQL DB      │  │
-             │  │  profiles / tasks / │  │
-             │  │  categories         │  │
-             │  └─────────────────────┘  │
-             │  ┌─────────────────────┐  │
-             │  │  Row Level Security │  │
-             │  │  (RLS ポリシー)      │  │
-             │  └─────────────────────┘  │
-             └───────────────────────────┘
+┌─────────────────────────────────────────────┐
+│             ブラウザ (SPA)                    │
+│                                             │
+│  ┌─────────────────────────────────────┐    │
+│  │      React 19 + React Router v7     │    │
+│  │                                     │    │
+│  │  /login        → <Auth>             │    │
+│  │  /admin/login  → <AdminAuth>        │    │
+│  │  /*            → <MainApp>          │    │
+│  │       App.tsx → components/         │    │
+│  └─────────────────────────────────────┘    │
+│                    │                        │
+│  ┌─────────────────────────────────────┐    │
+│  │         storageService              │    │
+│  │    services/storage.ts 経由         │    │
+│  └─────────────────────────────────────┘    │
+│             │              │                │
+│  ┌──────────────┐  ┌────────────────────┐   │
+│  │ localStorage │  │  Supabase Client   │   │
+│  │  (session)   │  │  @supabase/supabase│   │
+│  └──────────────┘  └────────────────────┘   │
+└───────────────────────────┬─────────────────┘
+                            │ HTTPS
+              ┌─────────────▼─────────────┐
+              │        Supabase            │
+              │  ┌─────────────────────┐  │
+              │  │   Auth (JWT)        │  │
+              │  │  ユーザー認証・セッション│  │
+              │  └─────────────────────┘  │
+              │  ┌─────────────────────┐  │
+              │  │  PostgreSQL DB      │  │
+              │  │  profiles / tasks / │  │
+              │  │  categories         │  │
+              │  └─────────────────────┘  │
+              │  ┌─────────────────────┐  │
+              │  │  Row Level Security │  │
+              │  │  (RLS ポリシー)      │  │
+              │  └─────────────────────┘  │
+              └───────────────────────────┘
 ```
 
 - **データ永続化**: Supabase PostgreSQL でユーザー・タスク・カテゴリを管理する。
-- **認証**: Supabase Auth（JWT）を使用。セッション情報は localStorage に保持される。
+- **認証**: Supabase Auth（JWT）を使用。セッション情報は Supabase Auth SDK が自動管理。
 - **権限制御**: Row Level Security (RLS) により、member は自分のタスクのみ操作可能。
-- React Router を使わずコンポーネント内の `view` state で画面を切り替える。
+- **ルーティング**: React Router v7 で URL ベースのルーティングを実装。ログイン画面は URL で分離。
 - ビルドツール: Vite 6 + TypeScript 5.8
 
 ---
@@ -54,6 +58,7 @@
 |---------|------|-----------|
 | UI フレームワーク | React | 19.2.4 |
 | 言語 | TypeScript | ~5.8.2 |
+| ルーティング | React Router DOM | 7.x |
 | ビルド | Vite | 6.x |
 | スタイリング | Tailwind CSS | 3.x（PostCSS 経由） |
 | アニメーション | tailwindcss-animate | 1.x（CSS クラスベース） |
@@ -92,9 +97,8 @@ interface Category {
 ```typescript
 interface User {
   id: string        // UUID
-  username: string  // ログインID
-  email?: string    // メールアドレス（任意）
-  password?: string // パスワード（平文 ※要改善）
+  username: string  // ユーザー名
+  email?: string    // メールアドレス（Supabase Auth が管理）
   role: Role        // 'admin' | 'member'
   name: string      // 表示名
   preferences?: {
@@ -177,11 +181,11 @@ interface AppState {
 ```
 TaskFlow/
 ├── index.html          # エントリポイント HTML（CDN なし）
-├── index.tsx           # React エントリポイント（index.css インポート）
+├── index.tsx           # React エントリポイント（BrowserRouter でラップ）
 ├── index.css           # Tailwind @tailwind ディレクティブ + スクロールバースタイル
-├── App.tsx             # メインコンポーネント（状態管理・ルーティング）
+├── App.tsx             # ルーティング定義・状態管理・メインアプリコンポーネント
 ├── types.ts            # 型定義
-├── constants.ts        # 定数（INITIAL_USERS, INITIAL_CATEGORIES, PRIORITY_CONFIG など）
+├── constants.ts        # 定数（INITIAL_CATEGORIES, PRIORITY_CONFIG など）
 ├── tailwind.config.js  # Tailwind v3 設定（darkMode: 'class', content, plugins）
 ├── postcss.config.js   # PostCSS 設定（tailwindcss + autoprefixer）
 ├── vite.config.ts      # Vite 設定（recharts チャンク分離）
@@ -189,7 +193,8 @@ TaskFlow/
 ├── package.json        # 依存関係
 │
 ├── components/
-│   ├── Auth.tsx          # ログイン画面
+│   ├── Auth.tsx          # メンバー用ログイン画面（/login）：ログイン + 新規登録
+│   ├── AdminAuth.tsx     # 管理者用ログイン画面（/admin/login）：ログインのみ・role 検証あり
 │   ├── TaskBoard.tsx     # タスクボード（カレンダー + デイリービュー）
 │   ├── Dashboard.tsx     # 管理者ダッシュボード（recharts グラフ）
 │   ├── TaskModal.tsx     # タスク作成・編集モーダル
@@ -198,56 +203,68 @@ TaskFlow/
 │   └── Icons.tsx         # SVG アイコン群（自作）
 │
 └── services/
-    └── storage.ts        # localStorage アクセス抽象化
+    └── storage.ts        # localStorage / Supabase アクセス抽象化
 ```
 
 ---
 
 ## 6. コンポーネント設計
 
-### 6.1 コンポーネントツリー
+### 6.1 ルーティング構成
 
 ```
-<App>
-│
-├── （未認証時）
-│   └── <Auth>              # ログインフォーム
-│
-└── （認証済み）
-    ├── <aside>             # サイドバー（PC）
-    │   ├── TaskFlow ロゴ
-    │   ├── タスクボードボタン
-    │   ├── ダッシュボードボタン（admin のみ）
-    │   ├── ユーザー情報
-    │   └── 設定ボタン
-    │
-    ├── <nav>               # ボトムナビゲーション（モバイル）
-    │
-    ├── <main>
-    │   ├── （view === 'board'）
-    │   │   └── <TaskBoard>
-    │   │       ├── ビュー切り替えタブ（カレンダー/デイリー）
-    │   │       ├── 検索・フィルターバー
-    │   │       └── カレンダービュー or デイリービュー
-    │   │
-    │   └── （view === 'dashboard'、admin のみ）
-    │       └── <Dashboard>
-    │           ├── サマリーカード × 4
-    │           ├── <BarChart> メンバー別ワークロード
-    │           ├── <PieChart> 全体完了率
-    │           └── メンバー進捗カード
-    │
-    ├── <TaskModal>         # タスク作成・編集（isTaskModalOpen）
-    ├── <SettingsModal>     # 設定（isSettingsModalOpen）
-    ├── <ConfirmModal>      # 削除確認（isConfirmModalOpen）
-    └── トースト通知スタック
+<BrowserRouter>          ← index.tsx でラップ
+  <App>
+    <Routes>
+      /login         → <Auth onSuccess onBack>          # メンバーログイン + 新規登録
+      /admin/login   → <AdminAuth onSuccess onBack>     # 管理者ログイン・role 検証
+      /*             → 未認証: <Navigate to="/login">
+                       認証済: <MainApp>
+    </Routes>
+  </App>
+</BrowserRouter>
 ```
 
-### 6.2 主要コンポーネント仕様
+### 6.2 コンポーネントツリー（認証済み）
+
+```
+<MainApp>
+│
+├── <aside>             # サイドバー（PC）
+│   ├── TaskFlow ロゴ
+│   ├── タスクボードボタン
+│   ├── ダッシュボードボタン（admin のみ）
+│   ├── ユーザー情報
+│   └── 設定ボタン
+│
+├── <nav>               # ボトムナビゲーション（モバイル）
+│
+├── <main>
+│   ├── （view === 'board'）
+│   │   └── <TaskBoard>
+│   │       ├── ビュー切り替えタブ（カレンダー/デイリー）
+│   │       ├── 検索・フィルターバー
+│   │       └── カレンダービュー or デイリービュー
+│   │
+│   └── （view === 'dashboard'、admin のみ）
+│       └── <Dashboard>
+│           ├── サマリーカード × 4
+│           ├── <BarChart> メンバー別ワークロード
+│           ├── <PieChart> 全体完了率
+│           └── メンバー進捗カード
+│
+├── <TaskModal>         # タスク作成・編集（isTaskModalOpen）
+├── <SettingsModal>     # 設定（isSettingsModalOpen）
+├── <ConfirmModal>      # 削除確認（isConfirmModalOpen）
+└── トースト通知スタック
+```
+
+### 6.3 主要コンポーネント仕様
 
 | コンポーネント | 主な Props | 役割 |
 |--------------|-----------|------|
-| `Auth` | `onLogin`, `users` | 認証フォーム |
+| `Auth` | `onSuccess`, `onBack` | メンバー用認証フォーム（ログイン + 新規登録） |
+| `AdminAuth` | `onSuccess`, `onBack` | 管理者用認証フォーム（ログインのみ・role 検証） |
 | `TaskBoard` | `tasks`, `user`, `isAdminMode`, `onEditTask`, `onDeleteTask`, `onUpdateStatus`, `onDateChange`, `categories` | カレンダー／デイリービュー統合 |
 | `Dashboard` | `users`, `tasks`, `onEditTask`, `onDeleteTask`, `isDarkMode` | グラフ分析 |
 | `TaskModal` | `isOpen`, `onClose`, `onSave`, `initialTask`, `currentUserId`, `adminUsers`, `categories` | タスク CRUD フォーム |
@@ -264,51 +281,78 @@ TaskFlow/
 | state | 型 | 説明 |
 |-------|----|------|
 | `state` | `AppState` | currentUser / tasks / users / categories を統合 |
+| `initializing` | `boolean` | Supabase セッション復元中フラグ（ローディング表示） |
+| `toasts` | `{ id, message, type }[]` | 表示中トーストの配列 |
+
+### 7.2 ローカル状態（MainApp 内 useState）
+
+| state | 型 | 説明 |
+|-------|----|------|
 | `view` | `'board' \| 'dashboard'` | 現在表示中のビュー |
 | `isTaskModalOpen` | `boolean` | タスクモーダルの開閉 |
 | `isSettingsModalOpen` | `boolean` | 設定モーダルの開閉 |
 | `isConfirmModalOpen` | `boolean` | 確認ダイアログの開閉 |
 | `editingTask` | `Task \| null` | 編集中タスク（null = 新規作成） |
 | `taskToDelete` | `string \| null` | 削除対象タスクID |
-| `toasts` | `{ id, message, type }[]` | 表示中トーストの配列 |
 
-### 7.2 副作用（useEffect）
+### 7.3 副作用（useEffect）
 
 | トリガー | 処理 |
 |----------|------|
-| 初回マウント | `storageService` 経由でデータ読み込み |
+| 初回マウント | Supabase Auth セッションを確認してユーザーを復元 |
 | `state.currentUser?.preferences?.darkMode` 変化 | `<html>` クラスと body スタイルを更新 |
 
-### 7.3 派生データ（App.tsx）
+### 7.4 派生データ（MainApp）
 
 | 計算値 | 説明 |
 |--------|------|
 | `userTasks` | admin は全タスク、member は自分のタスクのみ |
+| `isAdmin` | `currentUser.role === 'admin'` |
 
 ---
 
 ## 8. 画面設計
 
-### 8.1 ログイン画面
+### 8.1 メンバーログイン画面（/login）
 
 ```
 ┌──────────────────────────────┐
-│   TaskFlow ロゴ・タイトル       │
-│   サブタイトル                  │
+│   TaskFlow ロゴ・タイトル      │
+│   サブタイトル                 │
+│                              │
+│  [ログイン] [新規登録]  ← タブ  │
+│  ┌────────────────────────┐  │
+│  │  メールアドレス 入力      │  │
+│  └────────────────────────┘  │
+│  ┌────────────────────────┐  │
+│  │  パスワード 入力          │  │
+│  └────────────────────────┘  │
+│  [ログイン / アカウントを作成]  │
+└──────────────────────────────┘
+```
+
+### 8.2 管理者ログイン画面（/admin/login）
+
+```
+← ログイン種別の選択に戻る（/login へ）
+
+┌──────────────────────────────┐
+│   シールドアイコン              │
+│   管理者ログイン               │
+│   TaskFlow 管理者専用          │
 │                              │
 │  ┌────────────────────────┐  │
-│  │  ユーザー名 入力          │  │
+│  │  メールアドレス 入力      │  │
 │  └────────────────────────┘  │
 │  ┌────────────────────────┐  │
 │  │  パスワード 入力          │  │
 │  └────────────────────────┘  │
 │  [ログイン]                   │
-│                              │
-│  デモアカウント情報（2カラム）   │
+│  管理者アカウントは...（注記）   │
 └──────────────────────────────┘
 ```
 
-### 8.2 タスクボード（PC）
+### 8.3 タスクボード（PC）
 
 ```
 ┌──────────┬──────────────────────────────────────────┐
@@ -323,7 +367,7 @@ TaskFlow/
 └──────────┴──────────────────────────────────────────┘
 ```
 
-### 8.3 管理者ダッシュボード
+### 8.4 管理者ダッシュボード
 
 ```
 ┌──────────┬──────────────────────────────────────────┐
@@ -337,15 +381,51 @@ TaskFlow/
 
 ---
 
-## 9. テーマ設計
+## 9. 認証フロー
 
-### 9.1 ダークモード実装
+### 9.1 メンバーログイン（/login）
+
+```
+1. メールアドレス + パスワードで Supabase Auth にサインイン
+2. profiles テーブルから role・username・name・preferences を取得
+3. currentUser をセットして / にリダイレクト
+```
+
+### 9.2 管理者ログイン（/admin/login）
+
+```
+1. メールアドレス + パスワードで Supabase Auth にサインイン
+2. profiles テーブルから role を取得
+3. role !== 'admin' の場合 → supabase.auth.signOut() してエラー表示
+4. role === 'admin' の場合 → currentUser をセットして / にリダイレクト
+```
+
+### 9.3 セッション復元（初回アクセス時）
+
+```
+1. App マウント時に supabase.auth.getUser() でセッション確認
+2. セッションあり → profiles 取得 → currentUser 復元
+3. セッションなし → /login にリダイレクト
+```
+
+---
+
+## 10. テーマ設計
+
+### 10.1 ダークモード実装
 
 - `<html>` に `dark` クラスを付与／除去することで Tailwind の `dark:` バリアントが適用される
 - ユーザーの `preferences.darkMode` が変化するたびに `App.tsx` の useEffect で DOM を更新する
 - デフォルトはダークモード ON
 
-### 9.2 優先度カラーコード
+### 10.2 ログイン画面のテーマカラー
+
+| 画面 | アクセントカラー | 説明 |
+|------|--------------|------|
+| `/login`（メンバー） | blue / violet | 標準ブルー系グラデーション |
+| `/admin/login`（管理者） | teal / cyan | 管理者専用グリーン系グラデーション |
+
+### 10.3 優先度カラーコード
 
 | 優先度 | バッジ色 | 説明 |
 |--------|---------|------|
@@ -353,7 +433,7 @@ TaskFlow/
 | medium | 橙 (orange-400 / orange-900/40) | 中優先度 |
 | low    | 緑 (green-400 / green-900/40) | 低優先度 |
 
-### 9.3 ステータスカラーコード
+### 10.4 ステータスカラーコード
 
 | ステータス | 表示色 | 説明 |
 |-----------|--------|------|
@@ -363,7 +443,7 @@ TaskFlow/
 
 ---
 
-## 10. アニメーション設計
+## 11. アニメーション設計
 
 `tailwindcss-animate` プラグインによる CSS クラスベースのアニメーションを使用。
 
@@ -377,9 +457,9 @@ TaskFlow/
 
 ---
 
-## 11. ビルド設計
+## 12. ビルド設計
 
-### 11.1 Vite チャンク分割
+### 12.1 Vite チャンク分割
 
 ```typescript
 // vite.config.ts
@@ -388,17 +468,17 @@ manualChunks: {
 }
 ```
 
-### 11.2 本番ビルド出力（参考）
+### 12.2 本番ビルド出力（参考）
 
 | ファイル | サイズ（gzip） | 内容 |
 |---------|--------------|------|
 | `dist/assets/index-*.css` | ~6KB | Tailwind ユーティリティ |
-| `dist/assets/index-*.js` | ~69KB | アプリコード + React |
+| `dist/assets/index-*.js` | ~131KB | アプリコード + React + React Router |
 | `dist/assets/charts-*.js` | ~113KB | recharts |
 
 ---
 
-## 12. レスポンシブ設計
+## 13. レスポンシブ設計
 
 | ブレークポイント | レイアウト |
 |---------------|-----------|
@@ -407,9 +487,9 @@ manualChunks: {
 
 ---
 
-## 13. 将来の拡張設計
+## 14. 将来の拡張設計
 
-### 13.1 リアルタイム同期
+### 14.1 リアルタイム同期
 
 Supabase Realtime を活用して、他のユーザーのタスク更新を即時反映できる：
 
@@ -420,15 +500,15 @@ supabase
   .subscribe()
 ```
 
-### 13.2 ファイル添付
+### 14.2 ファイル添付
 
 Supabase Storage を使ってタスクにファイルを添付できるよう拡張可能。
 
 ---
 
-## 14. Supabase データベース設計
+## 15. Supabase データベース設計
 
-### 14.1 テーブル構成
+### 15.1 テーブル構成
 
 | テーブル | 説明 |
 |---------|------|
@@ -437,7 +517,7 @@ Supabase Storage を使ってタスクにファイルを添付できるよう拡
 | `public.categories` | タスクカテゴリ（チーム共有） |
 | `public.tasks` | タスク情報 |
 
-### 14.2 ER 図
+### 15.2 ER 図
 
 ```
 auth.users (1) ──── (1) profiles
@@ -446,7 +526,7 @@ profiles   (1) ──── (N) categories (created_by)
 categories (1) ──── (N) tasks      (category_id)
 ```
 
-### 14.3 SQL スキーマ定義
+### 15.3 SQL スキーマ定義
 
 ```sql
 -- ====================================
@@ -651,19 +731,21 @@ insert into public.categories (id, label, color) values
   ('00000000-0000-0000-0000-000000000003', 'その他', '#6b7280');
 ```
 
-### 14.4 認証フロー（Supabase Auth）
+### 15.4 管理者アカウントの作成手順
 
-現在の localStorage ベースの username/password 認証から Supabase Auth に移行する際の対応：
+管理者は `/admin/login` からセルフ登録できないため、以下の手順でシステム管理者が手動作成する：
 
-| 現在 | Supabase 移行後 |
-|------|----------------|
-| `username` + `password`（平文） | `email` + `password`（Supabase Auth で安全に管理） |
-| localStorage にユーザー一覧を保持 | `auth.users` + `profiles` テーブルで管理 |
-| セッションを localStorage で手動管理 | Supabase Auth SDK が JWT を自動管理 |
+1. Supabase ダッシュボード → `Authentication` → `Users` → `Add user`
+2. メール・パスワードを設定してユーザーを作成
+3. 作成後、SQL エディタで role を更新：
 
-> ログイン UI はメールアドレス入力に変更するか、`username → email` の変換テーブルを `profiles` で引く方式を採用する。
+```sql
+UPDATE public.profiles
+SET role = 'admin'
+WHERE email = 'admin@yourcompany.com';
+```
 
-### 14.5 型マッピング（TypeScript ↔ Supabase）
+### 15.5 型マッピング（TypeScript ↔ Supabase）
 
 | TypeScript 型 | Supabase テーブル | 主な変更点 |
 |--------------|------------------|-----------|

@@ -17,36 +17,24 @@
 
 ## セキュリティ
 
-- [ ] 🔴 パスワードのハッシュ化（現在は平文で localStorage に保存）
-- [ ] 🔴 セッション管理の強化（JWT または httpOnly Cookie の使用）
-- [ ] 🟠 ユーザー登録機能の追加（現在は初期データのデモアカウントのみ）
-- [ ] 🟠 管理者画面への直接アクセス防止（クライアント側のみのガード）
+- [ ] 🔴 管理者アカウント作成時の初期パスワード強制変更フロー
+- [ ] 🟠 管理者によるメンバーアカウントの停止・削除機能
 
 ---
 
-## バックエンド統合
+## バックエンド統合（Supabase 移行残作業）
 
-- [ ] 🟠 Express サーバーのエントリポイント作成（`server/index.ts` など）
-- [ ] 🟠 データベースのスキーマ定義（SQLite 等）
-  - `users` テーブル
-  - `tasks` テーブル
-  - `categories` テーブル
-- [ ] 🟠 REST API エンドポイントの実装
-  - `POST /api/auth/login`
-  - `POST /api/auth/logout`
-  - `GET /api/tasks` / `POST /api/tasks`
-  - `PUT /api/tasks/:id` / `DELETE /api/tasks/:id`
-  - `GET /api/users`
-- [ ] 🟠 フロントエンドの API クライアント実装（fetch / axios）
-- [ ] 🟠 localStorage からサーバーサイド DB へのデータ移行
+- [ ] 🟠 タスクの CRUD を localStorage から Supabase API に完全移行
+- [ ] 🟠 カテゴリの CRUD を Supabase API に移行
+- [ ] 🟠 プロフィール更新を Supabase API（`profiles` テーブル）に接続
+- [ ] 🟠 パスワード変更を Supabase Auth API（`supabase.auth.updateUser`）に接続
 
 ---
 
 ## ユーザー管理
 
-- [ ] 🟠 ユーザー登録フォームの実装
-- [ ] 🟡 管理者によるユーザー管理（追加・削除・ロール変更）
-- [ ] 🟢 アバター画像のアップロード・表示
+- [ ] 🟡 管理者によるユーザー管理（ロール変更・一覧表示）
+- [ ] 🟢 アバター画像のアップロード・表示（Supabase Storage）
 
 ---
 
@@ -58,7 +46,7 @@
 - [ ] 🟡 タスクのサブタスク（チェックリスト）
 - [ ] 🟡 タスクのソート順変更（手動ドラッグ）
 - [ ] 🟡 タスクのコピー・複製機能
-- [ ] 🟢 タスクへのファイル添付
+- [ ] 🟢 タスクへのファイル添付（Supabase Storage）
 - [ ] 🟢 タスクにタグ付け（カテゴリとは別の軸）
 - [ ] 🟢 タスクの依存関係設定（前のタスクが完了するまでブロック）
 
@@ -77,18 +65,17 @@
 
 - [ ] 🟠 ブラウザ通知（Web Notifications API）でのタスクリマインダー（通知設定 UI は実装済み）
 - [ ] 🟡 期限前アラート設定（1時間前・前日など）
-- [ ] 🟡 メール通知（バックエンド実装後）
+- [ ] 🟡 メール通知（Supabase Edge Functions 経由）
 - [ ] 🟢 Slack / Discord Webhook 連携通知
 
 ---
 
 ## データ・同期
 
-- [ ] 🟠 バックエンド実装後のクロスデバイス同期
+- [ ] 🟠 Supabase Realtime によるリアルタイム同期（他ユーザーのタスク更新を即時反映）
 - [ ] 🟡 データのエクスポート機能（CSV / JSON）
 - [ ] 🟡 データのインポート機能
 - [ ] 🟡 オフライン対応（PWA + Service Worker）
-- [ ] 🟢 リアルタイム同期（WebSocket / Server-Sent Events）
 
 ---
 
@@ -111,17 +98,20 @@
   - フィルタリングロジック
   - ステータス遷移
 - [ ] 🟠 コンポーネントテスト
+  - Auth / AdminAuth（ログインフロー・role 検証）
   - TaskBoard
   - TaskModal
   - Dashboard
 - [ ] 🟡 E2E テスト（Playwright / Cypress）
-  - ログイン〜タスク作成〜削除フロー
-  - 管理者ダッシュボード閲覧フロー
+  - メンバーログイン〜タスク作成〜削除フロー（/login）
+  - 管理者ログイン〜ダッシュボード閲覧フロー（/admin/login）
+  - 非管理者が /admin/login でログイン拒否されるシナリオ
 
 ---
 
 ## インフラ・デプロイ
 
+- [ ] 🟡 SPA の 404 対応（Vercel / Netlify の rewrite 設定でルーティングを `/index.html` に向ける）
 - [ ] 🟡 Docker コンテナ化
 - [ ] 🟡 CI/CD パイプライン構築（GitHub Actions）
 - [ ] 🟡 本番環境デプロイ設定（Vercel / Netlify / Railway など）
@@ -131,7 +121,7 @@
 
 ## ドキュメント
 
-- [ ] 🟡 API ドキュメント（バックエンド実装後）
+- [ ] 🟡 API ドキュメント（Supabase RLS・Edge Functions）
 - [ ] 🟡 コンポーネントドキュメント（Storybook）
 - [ ] 🟢 ユーザーマニュアル
 
@@ -144,11 +134,17 @@
 - [x] tailwindcss-animate による CSS アニメーション
 - [x] 外部 CDN 依存の排除（全依存を npm パッケージで管理）
 - [x] Vite の manualChunks による recharts チャンク分離（本番ビルド最適化）
-- [x] App.tsx のコンポーネント分割（Auth / TaskBoard / Dashboard / TaskModal / SettingsModal / ConfirmModal / Icons）
+- [x] App.tsx のコンポーネント分割（Auth / AdminAuth / TaskBoard / Dashboard / TaskModal / SettingsModal / ConfirmModal / Icons）
 - [x] storageService による localStorage アクセス抽象化（services/storage.ts）
 - [x] ダークモード / ライトモード切り替え（ユーザー preferences に保存）
-- [x] ログイン認証（localStorage ベース）
+- [x] Supabase Auth 統合（メール + パスワード認証・JWT セッション管理）
+- [x] メンバー用ログイン画面（/login）：ログイン + 新規登録
+- [x] 管理者専用ログイン画面（/admin/login）：ログインのみ・role 検証あり
+- [x] React Router DOM 導入による URL ベースのルーティング
+- [x] 認証済みユーザーのログイン画面へのリダイレクト防止
+- [x] 未認証ユーザーの保護ルートへのアクセス防止（/login にリダイレクト）
 - [x] ロールベースアクセス制御（admin / member）
+- [x] Supabase RLS によるサーバーサイド権限制御
 - [x] タスクの CRUD 操作
 - [x] タスクのステータス管理（todo / inprogress / done）
 - [x] ステータス・優先度のフィルタリング

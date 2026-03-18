@@ -69,6 +69,9 @@ const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
       return
     }
     setLoading(true)
+    console.log('email:', email)
+    console.log('username:', username)
+    console.log('name:', name)
     try {
       const { error } = await supabase.auth.signUp({
         email,
