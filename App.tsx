@@ -326,7 +326,15 @@ const App: React.FC = () => {
         preferences: profile.preferences,
       };
       const tasks = storageService.getTasks();
-      const users = storageService.getUsers();
+      const { data: allProfiles } = await supabase.from('profiles').select('*');
+      const users: User[] = (allProfiles ?? []).map((p: any) => ({
+        id: p.id,
+        username: p.username,
+        name: p.name,
+        email: '',
+        role: p.role,
+        preferences: p.preferences,
+      }));
       const categories = storageService.getCategories();
       storageService.setSession(user);
       setState({ currentUser: user, tasks, users, categories });
@@ -375,7 +383,15 @@ const App: React.FC = () => {
         preferences: profile.preferences,
       };
       const tasks = storageService.getTasks();
-      const users = storageService.getUsers();
+      const { data: allProfiles } = await supabase.from('profiles').select('*');
+      const users: User[] = (allProfiles ?? []).map((p: any) => ({
+        id: p.id,
+        username: p.username,
+        name: p.name,
+        email: '',
+        role: p.role,
+        preferences: p.preferences,
+      }));
       const categories = storageService.getCategories();
       storageService.setSession(user);
       setState({ currentUser: user, tasks, users, categories });
